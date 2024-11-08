@@ -1,0 +1,45 @@
+// package main
+
+// import (
+// 	"fmt"
+// )
+
+// type meta struct {
+// 	serverID	string
+// 	remarks		string
+// 	serverAge	int64
+// }
+
+// func main() {
+// 	defer func() {
+// 		if r := recover(); r != nil {
+// 			fmt.Println("PAAANICCC!!")
+// 		}
+// 	}()
+
+// 	name := meta{
+// 		serverID: "carthage-001",
+// 		remarks: "server stable",
+// 		serverAge: 40,
+// 	}
+
+// 	metadata := map[string]interface{}{
+// 		"name": "server-name-carthage",
+// 		"server_age": 10,
+// 	}
+
+// 	value, ok := metadata["name_what"]
+
+// 	fmt.Println("OK: ", ok)
+// 	fmt.Println("Value: ", value)
+
+// 	ConfigMethod(name)
+
+// 	users := []string{"name", "age", "email"}
+
+// 	fmt.Println("De-reference: ", users[10])
+// }
+
+// func ConfigMethod(config interface{}) {
+// 	fmt.Println("Configs: ", config)
+// }
