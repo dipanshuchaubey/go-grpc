@@ -1,0 +1,7 @@
+{
+  "name": "loadtest",
+  "packageManager": "yarn@4.5.1",
+  "dependencies": {
+    "k6": "^0.0.0"
+  }
+}

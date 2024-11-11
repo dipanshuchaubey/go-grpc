@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,16 +14,27 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	ot "user-service/otel"
 	as "user-service/protos/auth_service"
 	bs "user-service/protos/bootcamp_service"
 	us "user-service/protos/user_service"
 	types "user-service/types"
 
+	"go.opentelemetry.io/otel"
+
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+var (
+	name   = "user-service"
+	tracer = otel.Tracer(name)
+	meter  = otel.Meter(name)
+	logger = otelslog.NewLogger(name)
 )
 
 type server struct {
@@ -47,6 +59,11 @@ func (s *server) GetUser(ctx context.Context, in *us.GetUserRequest) (*us.GetUse
 }
 
 func (s *server) GetUsers(ctx context.Context, in *us.GetUsersRequest) (*us.GetUsersResponse, error) {
+	_, span := tracer.Start(ctx, "GetUsers")
+	defer span.End()
+
+	logger.InfoContext(ctx, "GetUsers: params - TenantID")
+
 	httpRes, httpErr := http.Get("https://jsonplaceholder.typicode.com/users")
 
 	if httpErr != nil {
@@ -166,48 +183,25 @@ func (s *server) GetBootcampsDetails(ctx context.Context, in *bs.GetBootcampsDet
 	return &bs.GetBootcampsDetailsResponse{}, nil
 }
 
-// func main() {
-// 	conn, err := grpc.Dial("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
-// 	if err != nil {
-// 		log.Fatalf("failed to connect to gRPC server at localhost:50051: %v", err)
-// 	}
-// 	defer conn.Close()
-// 	c := v1.NewUserServiceClient(conn)
-
-// 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-// 	defer cancel()
-
-// 	r, err := c.GetUser(ctx, &v1.GetUserRequest{})
-// 	if err != nil {
-// 		log.Fatalf("error calling function SayHello: %v", err)
-// 	}
-
-// 	log.Printf("Response from gRPC server's SayHello function: %s", r.GetData())
-
-func panicHandleMiddleware(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (response any, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("panic occurred: %v", r)
-			fmt.Println(err.Error())
-		}
-	}()
-
-	return handler(ctx, req)
-}
-
-func timeoutInterceptor(
-	ctx context.Context,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*50)
+func timeoutInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*2)
 	defer cancel()
 
 	// Create a channel to catch the result or a panic recovery
 	done := make(chan struct{})
 	var resp interface{}
 	var err error
+
+	// Set up OpenTelemetry.
+	otelShutdown, otelErr := ot.SetupOTelSDK(ctx)
+	if otelErr != nil {
+		return nil, otelErr
+	}
+
+	// Handle shutdown properly so nothing leaks.
+	defer func() {
+		err = errors.Join(err, otelShutdown(context.Background()))
+	}()
 
 	go func() {
 		defer func() {
@@ -255,7 +249,6 @@ func main() {
 
 		options := []grpc.ServerOption{
 			grpc.ConnectionTimeout(time.Second),
-			// grpc.UnaryInterceptor(panicHandleMiddleware),
 			grpc.UnaryInterceptor(timeoutInterceptor),
 		}
 

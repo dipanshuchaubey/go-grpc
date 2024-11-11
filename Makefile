@@ -7,4 +7,4 @@ protos:
 	$(FILES)
 
 build:
-	go build -o bin
+	go build -o bin/user-service
